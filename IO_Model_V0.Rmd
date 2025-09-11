@@ -1,0 +1,643 @@
+---
+title: "IO_Model_V0"
+author: "Anda Codreanu"
+date: "2025-09-09"
+output: html_document
+toc: true          # table of contents 
+toc_depth: 3       
+toc_float: true    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Model Overview
+
+[**Data Sources**]{.underline}
+
+1.  ***Biosolutions Output*** - Restricted or Global - contains country/activity biosolutions values calculated using the UNIDO model, for which there is a separate code file. The restricted is preferred, but in case of missing values, the global file is used.
+2.  ***2020 IO Data from OECD.*** Data is available on the OECD website, and this model uses currently the 2023-published data, which has coverage for the period 2017-2020.
+3.  ***A Translation key file*** to convert the UNIDO activity codes to the OECD ones - check if it can be avoided
+4.  ***Employment Ratios***. per activity/country.
+
+[**Code Summary:**]{.underline}
+
+The code uses the extended Input Output Model 2023 from OECD, which contains industry interdependence data for 45 industries and 77 countries. This means that each individual row or colummn represents an industry wihtin one of the countries, thereby generating a 3465\*3465 matrix.
+
+The code builds a Leontief input–output model from two core inputs: `IO_matrix`, a square transactions table where rows are supplier industries and columns are buyer industries (each cell is the value a buyer purchases from a supplier), and `row_3475`, the previously computed total output vector (one total per industry, aligned to the columns of `IO_matrix`; it’s named after its original row position in the raw data). From these it derives the technical coefficients AA, computes the Leontief inverse `Leontief_matrix`, and then creates a biosolutions demand vector by merging UNIDO restricted/global files and translating national activity codes to IO/OECD codes via `Translate_Key`. It distributes each industry’s biosolutions demand across all supplying industries using the full Leontief matrix (not the multipliers), forming a 3474×3474 impact matrix; from this it separates buyer‑side (affected) and supplier‑side (affecting) totals and splits each into direct (the original `IO_input`) and indirect (difference) effects. Finally, it converts outputs into jobs by joining employment output ratios (`IO_emp_output_ratio`) to the pre‑transpose impact matrix and multiplying to obtain job counts.
+
+## Steps for running this code
+
+[to be filled in] [also fill in what needs to be updated to use new data into this model]
+
+## 1. Install and import libraries
+
+Note: if already installed, go to the next cell
+
+```{r setup1, include=FALSE}
+#setting up the environment
+rm(list = ls()) #cleans the environment
+
+#install packages - only needed once 
+install.packages("readr") 
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("data.table")
+install.packages("writexl")
+install.packages("readxl")
+```
+
+```{r setup2, include=FALSE}
+
+#Import Libraries - needs to be done every time 
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(data.table)
+library(writexl)
+library(readxl)
+```
+
+## 2. Load Data
+
+When running this cell, you load all the datasets required throughout the analysis. Please change the paths to match your own folder structure, and ensure you download or reference the exact same files as below. This case uses a working directory in which all inputs are saved, which may differ from your own folder structure.
+
+```{r data, include=FALSE}
+
+# set working directory:
+setwd("C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Novonesis - The value of biosolutions/Code/IO Model")
+
+#Load 2020 - IO Data 
+data <- read.csv("2020 fixad men fel format.csv", sep = ";")
+
+#Load the UNIDO Data 
+Unido_global <- read_excel("BioSolutions_Output_Global_EUR_24.xlsx",sheet = "Full")
+Unido_restricted <- read_excel("BioSolutions_Output_EUR_24.xlsx", sheet = "Full")
+
+#Load transaction key data 
+Translate_Key <- read_excel("Unido IO translation key.xlsx")
+
+#IO Codes
+IO_Code <- read_excel("IO_Code.xlsx", sheet="Blad1")
+
+# Employment and country-specific data for point 4.3
+
+IO_emp_output_ratio <- read_excel("IO_emp_output_ratio.xlsx")
+
+
+#alternative data - troubleshooting (Marc can delete it)
+#data <- read.csv("C:/Users/MarcSkovJacobsenADC/ADC/ADC Denmark MNO - Client Folders N/Novonesis/2024/Global socio-economic value of biosolutions/3. Project Execution/IO/data/2020_IO_Raw_for_R.csv")
+# Set an Output folder: also commented out - check towards the end 
+#file_path <- "C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Code/IO Model"
+```
+
+## 3.1: Data Pre-processing for the IO Model
+
+In this part we first ensure that all the variables are in numerical format, and we remove all the rows where the total output value is missing. Afterwards, we remove country-industry combinations for [insert reason]. Lastly, variables such as HFCE = Household consumption, NPISH = Non-profit institutions, GFCF = Gross fixed capital formation. INVNT = Inventory changes and DPABR = Direct purchases abroad are deleted due to their limited relevance relative to the case.
+
+```{r data pre-processing, include=FALSE}
+
+#convert from dataframe to a table format 
+data <- as.data.table(data)
+
+# Convert all columns in the dataframe to numeric, and check if it worked.
+# Note: here you loose all strings, also meaning the row totals names 
+
+data[] <- lapply(data, function(x) as.numeric(as.character(x)))
+all_numeric <- sapply(data, is.numeric)
+if (all(all_numeric)) {
+  print("All columns in data are now numeric")
+} else {
+  print("Some columns could not be converted to numeric")
+}
+
+#Delete rows where total output is missing (OUT = 00 for these rows)
+#Last 3 rows are total Value Added (VA) and Total Supply (TLS) and the Total Output (OUT) totals per column                              
+data <- data %>%
+  slice(-c(90, 138, 225, 315, 380, 515, 
+           540:585, 990, 1263, 1264, 1273, 
+           1755, 1803, 1845, 1982, 1983, 
+           1985, 1990, 2116:2160, 2250, 
+           2610, 2658, 2883:2885, 3511:3515, 
+           3533:3555, 3600, 3601:3605, 3623:3645, 3475, 3476))
+
+# First we remove the columns with all 0's across rows, and then columns that are irrelevant for the analysis, because they refer to variables such as GFCF
+
+data <- data %>%
+  select(-c(
+    
+    #First: Remove columns with missing values across all rows 
+    AUS_T, BEL_B05_06, BGD_T, BLR_T, BRN_C29, CHL_C29, CHL_T, CHN_A01_02, CHN_A03, CHN_B05_06, 
+    CHN_B07_08, CHN_B09, CHN_C10T12, CHN_C13T15, CHN_C16, CHN_C17_18, CHN_C19, CHN_C20, CHN_C21, 
+    CHN_C22, CHN_C23, CHN_C24, CHN_C25, CHN_C26, CHN_C27, CHN_C28, CHN_C29, CHN_C30, CHN_C31T33, 
+    CHN_D, CHN_E, CHN_F, CHN_G, CHN_H49, CHN_H50, CHN_H51, CHN_H52, CHN_H53, CHN_I, CHN_J58T60, 
+    CHN_J61, CHN_J62_63, CHN_K, CHN_L, CHN_M, CHN_N, CHN_O, CHN_P, CHN_Q, CHN_R, CHN_S, CHN_T, 
+    EGY_T, HKG_B05_06, HKG_B07_08, HKG_C22, JPN_T, KHM_B05_06, KHM_T, LUX_A03, LUX_B05_06, LUX_B09, 
+    LUX_C19, MEX_A01_02, MEX_A03, MEX_B05_06, MEX_B07_08, MEX_B09, MEX_C10T12, MEX_C13T15, MEX_C16, 
+    MEX_C17_18, MEX_C19, MEX_C20, MEX_C21, MEX_C22, MEX_C23, MEX_C24, MEX_C25, MEX_C26, MEX_C27, 
+    MEX_C28, MEX_C29, MEX_C30, MEX_C31T33, MEX_D, MEX_E, MEX_F, MEX_G, MEX_H49, MEX_H50, MEX_H51, 
+    MEX_H52, MEX_H53, MEX_I, MEX_J58T60, MEX_J61, MEX_J62_63, MEX_K, MEX_L, MEX_M, MEX_N, MEX_O, 
+    MEX_P, MEX_Q, MEX_R, MEX_S, MEX_T, MMR_T, PHL_T, PRT_B05_06, SGP_B05_06, SGP_B07_08, SGP_B09, 
+    MX2_A01_02, MX2_A03, MX2_B05_06, MX2_B07_08, MX2_B09, MX2_D, MX2_E, MX2_F, MX2_G, MX2_H49, 
+    MX2_H50, MX2_H51, MX2_H52, MX2_H53, MX2_I, MX2_J58T60, MX2_J61, MX2_J62_63, MX2_K, MX2_L, 
+    MX2_M, MX2_N, MX2_O, MX2_P, MX2_Q, MX2_R, MX2_S, MX2_T, CN1_T, CN2_A01_02, CN2_A03, CN2_B05_06, 
+    CN2_B07_08, CN2_B09, CN2_D, CN2_E, CN2_F, CN2_G, CN2_H49, CN2_H50, CN2_H51, CN2_H52, CN2_H53, 
+    CN2_I, CN2_J58T60, CN2_J61, CN2_J62_63, CN2_K, CN2_L, CN2_M, CN2_N, CN2_O, CN2_P, CN2_Q, CN2_R, 
+    CN2_S, CN2_T,
+    
+    #Second: Remove the irrelevant variables from all countries
+    ARG_HFCE, ARG_NPISH, ARG_GGFC, ARG_GFCF, ARG_INVNT, ARG_DPABR,
+    AUS_HFCE, AUS_NPISH, AUS_GGFC, AUS_GFCF, AUS_INVNT, AUS_DPABR,
+    AUT_HFCE, AUT_NPISH, AUT_GGFC, AUT_GFCF, AUT_INVNT, AUT_DPABR,
+    BEL_HFCE, BEL_NPISH, BEL_GGFC, BEL_GFCF, BEL_INVNT, BEL_DPABR,
+    BGD_HFCE, BGD_NPISH, BGD_GGFC, BGD_GFCF, BGD_INVNT, BGD_DPABR,
+    BGR_HFCE, BGR_NPISH, BGR_GGFC, BGR_GFCF, BGR_INVNT, BGR_DPABR,
+    BLR_HFCE, BLR_NPISH, BLR_GGFC, BLR_GFCF, BLR_INVNT, BLR_DPABR,
+    BRA_HFCE, BRA_NPISH, BRA_GGFC, BRA_GFCF, BRA_INVNT, BRA_DPABR,
+    BRN_HFCE, BRN_NPISH, BRN_GGFC, BRN_GFCF, BRN_INVNT, BRN_DPABR,
+    CAN_HFCE, CAN_NPISH, CAN_GGFC, CAN_GFCF, CAN_INVNT, CAN_DPABR,
+    CHE_HFCE, CHE_NPISH, CHE_GGFC, CHE_GFCF, CHE_INVNT, CHE_DPABR,
+    CHL_HFCE, CHL_NPISH, CHL_GGFC, CHL_GFCF, CHL_INVNT, CHL_DPABR,
+    CHN_HFCE, CHN_NPISH, CHN_GGFC, CHN_GFCF, CHN_INVNT, CHN_DPABR,
+    CIV_HFCE, CIV_NPISH, CIV_GGFC, CIV_GFCF, CIV_INVNT, CIV_DPABR,
+    CMR_HFCE, CMR_NPISH, CMR_GGFC, CMR_GFCF, CMR_INVNT, CMR_DPABR,
+    COL_HFCE, COL_NPISH, COL_GGFC, COL_GFCF, COL_INVNT, COL_DPABR,
+    CRI_HFCE, CRI_NPISH, CRI_GGFC, CRI_GFCF, CRI_INVNT, CRI_DPABR,
+    CYP_HFCE, CYP_NPISH, CYP_GGFC, CYP_GFCF, CYP_INVNT, CYP_DPABR,
+    CZE_HFCE, CZE_NPISH, CZE_GGFC, CZE_GFCF, CZE_INVNT, CZE_DPABR,
+    DEU_HFCE, DEU_NPISH, DEU_GGFC, DEU_GFCF, DEU_INVNT, DEU_DPABR,
+    DNK_HFCE, DNK_NPISH, DNK_GGFC, DNK_GFCF, DNK_INVNT, DNK_DPABR,
+    EGY_HFCE, EGY_NPISH, EGY_GGFC, EGY_GFCF, EGY_INVNT, EGY_DPABR,
+    ESP_HFCE, ESP_NPISH, ESP_GGFC, ESP_GFCF, ESP_INVNT, ESP_DPABR,
+    EST_HFCE, EST_NPISH, EST_GGFC, EST_GFCF, EST_INVNT, EST_DPABR,
+    FIN_HFCE, FIN_NPISH, FIN_GGFC, FIN_GFCF, FIN_INVNT, FIN_DPABR,
+    FRA_HFCE, FRA_NPISH, FRA_GGFC, FRA_GFCF, FRA_INVNT, FRA_DPABR,
+    GBR_HFCE, GBR_NPISH, GBR_GGFC, GBR_GFCF, GBR_INVNT, GBR_DPABR,
+    GRC_HFCE, GRC_NPISH, GRC_GGFC, GRC_GFCF, GRC_INVNT, GRC_DPABR,
+    HKG_HFCE, HKG_NPISH, HKG_GGFC, HKG_GFCF, HKG_INVNT, HKG_DPABR,
+    HRV_HFCE, HRV_NPISH, HRV_GGFC, HRV_GFCF, HRV_INVNT, HRV_DPABR,
+    HUN_HFCE, HUN_NPISH, HUN_GGFC, HUN_GFCF, HUN_INVNT, HUN_DPABR,
+    IDN_HFCE, IDN_NPISH, IDN_GGFC, IDN_GFCF, IDN_INVNT, IDN_DPABR,
+    IND_HFCE, IND_NPISH, IND_GGFC, IND_GFCF, IND_INVNT, IND_DPABR,
+    IRL_HFCE, IRL_NPISH, IRL_GGFC, IRL_GFCF, IRL_INVNT, IRL_DPABR,
+    ISL_HFCE, ISL_NPISH, ISL_GGFC, ISL_GFCF, ISL_INVNT, ISL_DPABR,
+    ISR_HFCE, ISR_NPISH, ISR_GGFC, ISR_GFCF, ISR_INVNT, ISR_DPABR,
+    ITA_HFCE, ITA_NPISH, ITA_GGFC, ITA_GFCF, ITA_INVNT, ITA_DPABR,
+    JOR_HFCE, JOR_NPISH, JOR_GGFC, JOR_GFCF, JOR_INVNT, JOR_DPABR,
+    JPN_HFCE, JPN_NPISH, JPN_GGFC, JPN_GFCF, JPN_INVNT, JPN_DPABR,
+    KAZ_HFCE, KAZ_NPISH, KAZ_GGFC, KAZ_GFCF, KAZ_INVNT, KAZ_DPABR,
+    KHM_HFCE, KHM_NPISH, KHM_GGFC, KHM_GFCF, KHM_INVNT, KHM_DPABR,
+    KOR_HFCE, KOR_NPISH, KOR_GGFC, KOR_GFCF, KOR_INVNT, KOR_DPABR,
+    LAO_HFCE, LAO_NPISH, LAO_GGFC, LAO_GFCF, LAO_INVNT, LAO_DPABR,
+    LTU_HFCE, LTU_NPISH, LTU_GGFC, LTU_GFCF, LTU_INVNT, LTU_DPABR,
+    LUX_HFCE, LUX_NPISH, LUX_GGFC, LUX_GFCF, LUX_INVNT, LUX_DPABR,
+    LVA_HFCE, LVA_NPISH, LVA_GGFC, LVA_GFCF, LVA_INVNT, LVA_DPABR,
+    MAR_HFCE, MAR_NPISH, MAR_GGFC, MAR_GFCF, MAR_INVNT, MAR_DPABR,
+    MEX_HFCE, MEX_NPISH, MEX_GGFC, MEX_GFCF, MEX_INVNT, MEX_DPABR,
+    MLT_HFCE, MLT_NPISH, MLT_GGFC, MLT_GFCF, MLT_INVNT, MLT_DPABR,
+    MMR_HFCE, MMR_NPISH, MMR_GGFC, MMR_GFCF, MMR_INVNT, MMR_DPABR,
+    MYS_HFCE, MYS_NPISH, MYS_GGFC, MYS_GFCF, MYS_INVNT, MYS_DPABR,
+    NGA_HFCE, NGA_NPISH, NGA_GGFC, NGA_GFCF, NGA_INVNT, NGA_DPABR,
+    NLD_HFCE, NLD_NPISH, NLD_GGFC, NLD_GFCF, NLD_INVNT, NLD_DPABR,
+    NOR_HFCE, NOR_NPISH, NOR_GGFC, NOR_GFCF, NOR_INVNT, NOR_DPABR,
+    NZL_HFCE, NZL_NPISH, NZL_GGFC, NZL_GFCF, NZL_INVNT, NZL_DPABR,
+    PAK_HFCE, PAK_NPISH, PAK_GGFC, PAK_GFCF, PAK_INVNT, PAK_DPABR,
+    PER_HFCE, PER_NPISH, PER_GGFC, PER_GFCF, PER_INVNT, PER_DPABR,
+    PHL_HFCE, PHL_NPISH, PHL_GGFC, PHL_GFCF, PHL_INVNT, PHL_DPABR,
+    POL_HFCE, POL_NPISH, POL_GGFC, POL_GFCF, POL_INVNT, POL_DPABR,
+    PRT_HFCE, PRT_NPISH, PRT_GGFC, PRT_GFCF, PRT_INVNT, PRT_DPABR,
+    ROU_HFCE, ROU_NPISH, ROU_GGFC, ROU_GFCF, ROU_INVNT, ROU_DPABR,
+    RUS_HFCE, RUS_NPISH, RUS_GGFC, RUS_GFCF, RUS_INVNT, RUS_DPABR,
+    SAU_HFCE, SAU_NPISH, SAU_GGFC, SAU_GFCF, SAU_INVNT, SAU_DPABR,
+    SEN_HFCE, SEN_NPISH, SEN_GGFC, SEN_GFCF, SEN_INVNT, SEN_DPABR,
+    SGP_HFCE, SGP_NPISH, SGP_GGFC, SGP_GFCF, SGP_INVNT, SGP_DPABR,
+    SVK_HFCE, SVK_NPISH, SVK_GGFC, SVK_GFCF, SVK_INVNT, SVK_DPABR,
+    SVN_HFCE, SVN_NPISH, SVN_GGFC, SVN_GFCF, SVN_INVNT, SVN_DPABR,
+    SWE_HFCE, SWE_NPISH, E_GGFC, SWE_GFCF, SWE_INVNT, SWE_DPABR,
+    THA_HFCE, THA_NPISH, THA_GGFC, THA_GFCF, THA_INVNT, THA_DPABR,
+    TUN_HFCE, TUN_NPISH, TUN_GGFC, TUN_GFCF, TUN_INVNT, TUN_DPABR,
+    TUR_HFCE, TUR_NPISH, TUR_GGFC, TUR_GFCF, TUR_INVNT, TUR_DPABR,
+    TWN_HFCE, TWN_NPISH, TWN_GGFC, TWN_GFCF, TWN_INVNT, TWN_DPABR,
+    UKR_HFCE, UKR_NPISH, UKR_GGFC, UKR_GFCF, UKR_INVNT, UKR_DPABR,
+    USA_HFCE, USA_NPISH, USA_GGFC, USA_GFCF, USA_INVNT, USA_DPABR,
+    VNM_HFCE, VNM_NPISH, VNM_GGFC, VNM_GFCF, VNM_INVNT, VNM_DPABR,
+    ZAF_HFCE, ZAF_NPISH, ZAF_GGFC, ZAF_GFCF, ZAF_INVNT, ZAF_DPABR,
+    ROW_HFCE, ROW_NPISH, ROW_GGFC, ROW_GFCF, ROW_INVNT, ROW_DPABR,
+    
+    # Drop the OUT column entirely - last column of the dataset, as well as the first one, which originally contained    the names for each row>
+    
+    OUT, V1 #if you should have them in data - then use the cpode below
+    
+  ))
+
+#alternatively, remove the V1 and OUT later if you need data to coontain them 
+#data <- data %>%
+#  select(-c(V1, OUT))
+
+# check if everything is numeric
+all_numeric <- sapply(data, is.numeric)
+if (all(all_numeric)) {
+  print("All columns in the dataset are now numeric")
+} else {
+  print("Some columns could not be converted to numeric")
+}
+
+# the data dataframe contains one totals column - but the original code creates a new one_row dataframe for the totals. this code makes the one-row dataframe and eliminates the last column.
+
+IO_matrix <- data
+IO_matrix <- IO_matrix %>%
+  slice(-c(3475))
+
+#making a totals row
+row_3475 <- data[3475, , drop = FALSE]
+row_3475 <- row_3475[, -1]
+row_3475 <- row_3475 %>%
+  select(-OUT)
+
+# Ensure row_3475 is a numeric vector
+row_3475 <- as.numeric(as.character(row_3475))
+```
+
+## 3.2 Implementing the Leontief Input-Output Model
+
+The following code follows the Leontief Input-Output model methodology. In this model, the transactions matrix $Z$ is `IO_matrix` (the data that was just cleaned, and in which the interconnections between industry/country pairs can be seen: each column is a sector that acts as 'buyer', and the rows are the 'suppliers'). The total output vector $X$ is `row_3475`contains the total production value for each sector. From these, the code builds the technical coefficients matrix A = Z/X, where each entry shows the share of a buyer’s output that comes from a given supplier. This matrix captures the production structure in proportional terms.
+
+Using $A$, the model computes the Leontief inverse $L = (I - A)^{-1}$, where $I$ is the identity matrix. This inverse reflects both direct and indirect requirements across the economy: if demand for one sector rises, $L$ shows how much extra output is needed from all sectors to meet that demand. For example, if column “Automotive” has a value of 1.4 in the row “Steel,” it means that for every 1 unit of extra final demand for cars, steel production must increase by 1.4 units.
+
+Finally, the code calculates output multipliers by summing the columns of $L$. These multipliers indicate how much total output is generated in the economy when final demand in a given sector increases by one unit. For instance, if the multiplier for “Automotive” is 2.8, then an extra \$1 of car demand leads to \$2.8 of total output across all sectors combined, so this is a good picture of the impact of every column on the economy.
+
+```{r matrix calculations, include=FALSE}
+
+# ------------------------------------------------------------
+# Technical coefficients: A = Z / X 
+# ------------------------------------------------------------
+
+#Divide the entire dataframe IO_matrix by row_3475 (containing total values) - to get a matrix where all row numbers are % out of column total
+result <- sweep(IO_matrix, 2, row_3475, FUN = "/")
+Amatrixshares <- result
+Amatrixshares <- as.matrix(Amatrixshares)
+
+# Create the Identity Matrix - make sure it matches in size with the shares matrix
+identity_matrix <- diag(3474)
+
+# Replace missing values in A with 0, then compute I - A
+Amatrixshares[is.na(Amatrixshares)] <- 0  # Or replace with a small value, e.g., 1e-5
+I_minus_A <- identity_matrix - Amatrixshares
+I_minus_A_matrix <- as.matrix(I_minus_A) #ensure it has the right matrix format
+
+# Optional diagnostics
+det(I_minus_A)
+any(is.na(I_minus_A)) # check for missing values  
+
+#------------------------------------------------
+# Make the Leontief Matrix and multiplier martrix 
+#------------------------------------------------
+
+# Create the Leontief Matrix - L = (I - A)^(-1)
+Leontief_matrix <- solve(I_minus_A)
+colnames(Leontief_matrix) <- rownames(Leontief_matrix) #ensure there are matching names for all industries/countries
+
+# Create the multipliers
+# Sum the columns of the Leontief matrix to get the total output multipliers
+multipliers <- colSums(Leontief_matrix)
+multipliers <- as.data.frame(multipliers) #ensure the right format
+
+# Print the multipliers - uncomment if needed 
+# print(multipliers)
+
+# Transpose the multipliers 
+multipliers_transponsed <- t(multipliers)
+multipliers_transponsed <- as.data.frame(multipliers_transponsed) #ensure right format 
+```
+
+## 4.1 Combining the IO Model with the UNIDO outputs
+
+The following code requires the UNIDO data output, which are excel files computed using an earlier R code and which provide total biosolutions value by country and activities. There is a global and restricted file - the restricted is preferred but if data is missing, that should be taken from the global excel file. Since these files are computed for UNIDO activity codes, a translation file is used to convert them to IO codes(OECD), so they match with the model. For activities without a direct IO match, a placeholder name is created using the OECD code to ensure every activity can be linked to the IO model "ROW_OECDcode". The code further uses another excel file which contains the IO codes for each country and industry as in the IO model, to map . It is merged with the UNIDO data to ensure that all codes are retained, even if some lack associated UNIDO values. The result is a vetor where each element represents the estimated biosolutions demand for a specific IO industry.
+
+This vector is then multiplied by the previously calculated Leontief matrix. By multiplying the biosolutions demand vector with this matrix, the model distributes the total biosoliutions demand aacross all supplying sectors according to their dependency shares. The result is a matrix showing how much of each sector’s output is linked to biosolutions demand in every other sectors. The resulting 3474×3474 matrix is then transposed for easier interpretation. Finally, two summaries are created: one showing the affected effects (how much each industry is impacted as a buyer) and one showing the affecting effects (how much each industry contributes as a supplier). These outputs are essential for understanding the full economic footprint of biosolutions demand across sectors.
+
+```{r UNIDO, include=FALSE}
+
+#--------------------------------------------------
+# Getting biosolutions values from the UNIDO data
+#--------------------------------------------------
+
+# Match the 2 available datasets - we prefer the restricted, but use matching data from global if that is not there
+Unido_merg <- rbind(Unido_restricted, Unido_global)
+
+#ensure no duplicates, and the desired structure of the dataset
+Unido <- Unido_merg %>%
+distinct(Country, ActivityCode, .keep_all = TRUE)
+
+#merge the UNIDO data with the Translation Key dataset to add a column with new activity codes
+Unido_IO <- merge(Unido, Translate_Key, by = c("Country", "ActivityCode"), all.x = TRUE)
+
+# Replace NA values in the row names with a combination of row number and column2 value, so all gets an IO_Name
+Unido_IO <- Unido_IO %>%
+  mutate(IO_name = ifelse(is.na(`IO name`), 
+                          paste("ROW", `OECD code`, sep = "_"), 
+                          `IO name`))
+
+#Calculate total biosolutions value per IO name - leads to a dataframe with total_value for each IO_name
+Unido_IO_2 <- Unido_IO %>%
+  group_by(IO_name) %>%  # Use backticks around "IO name"
+  summarise(
+    total_value = sum(BioSolutionsValueHigh2024, na.rm = TRUE),
+      )
+
+# Left join - the IO_codes excel with the UNIDO data, and drop the dummy column in the IO dataset 
+IO_input <- left_join(IO_Code, Unido_IO_2, by = c("IO_name"))
+IO_input <- IO_input %>%
+  select(-Dummy,)
+
+#Diagnostics
+#replace the values in the merged dataframe with 0 
+IO_input[is.na(IO_input)] <- 0
+
+IO_input <- as.data.frame(IO_input)
+
+# Set the first column as row names
+rownames(IO_input) <- IO_input[, 1]
+IO_input <- IO_input %>%
+  rename(Direct_value = total_value)
+
+# Remove the first column
+IO_input <- IO_input[, -1, drop = FALSE]
+# Now it is the right dimension
+
+IO_input_vector <- as.matrix(IO_input)
+IO_input <-t(IO_input)
+
+#---------------------------------------------------------------
+# Multiplication with the Leontief matrix calculated previously 
+#---------------------------------------------------------------
+
+# First ensure right dimensions for multiplication:
+
+if (dim(Leontief_matrix)[2] == dim(IO_input_vector)[1]) {
+  print("Matrices are compatible for multiplication")
+} else {
+  print("Matrices are not compatible for multiplication - check previous calculations")
+}
+
+# Perform matrix multiplication between the IO Vector and the matrix 
+#this is a vector matrix multiplication, so the sweep function is used to multiply each element in the vector with a column in the matrix => the output is a 3474x3474 matrix 
+IO_input_result <-  Leontief_matrix %*% IO_input_vector
+
+IO_input_result <- sweep(Leontief_matrix, 2, IO_input_vector, FUN = "*")
+dim(IO_input_result)
+
+#if any missing values - fill with 0 
+IO_input_result[is.na(IO_input_result)] <- 0
+# This is 3474X3474
+IO_input_result <-as.data.frame(IO_input_result)
+
+#---------------------------------------------------------------
+# Transpose the matrix to calculate the effect on industry level 
+#---------------------------------------------------------------
+transposed_matrix <- t(IO_input_result)
+
+#### Calculate the sum of each row (from before the transpose) - that is the country AFFECTED by the itself and other countries ####
+# So the sum of Denmark would be the sum of jobs created in Denmark
+IO_input_result_final_result_rows <- colSums(transposed_matrix)
+print(IO_input_result_final_result_rows)
+All_UNIDO_rows <- as.data.frame(t(IO_input_result_final_result_rows))
+
+#### Calculate the sum of each row - that is the country AFFECTING by the itself and other countries ####
+# Sum each column of the resulting matrix to get the final result
+IO_input_result_final_result_columns <- colSums(IO_input_result)
+print(IO_input_result_final_result_columns)
+All_UNIDO_columns <- as.data.frame(t(IO_input_result_final_result_columns))
+
+```
+
+## 4.2.1 Indirect/Direct effects
+
+The following code separates buyer-side (“Affected”) and supplier-side (“Affecting”) impacts from biosolutions demand.
+
+[**Affected:**]{.underline}
+
+-   This one is how that industry is AFFECTED by biosolutions directly and indirectly
+-   we take the rows from the transposed matrix
+-   We combine this one with the IO_output vector - which is a dataset of one row and multiple columns
+-   Total effect is All_UNIDO_rows for the IndustryXCountry, and the direct effect is in the values from the IO vector
+-   the difference between the two generates the final effects
+
+[**Affecting:**]{.underline}
+
+-   This one is how that industry is AFFECTING by biosolutions directly and indirectly
+-   each of the columns in the transposed matrix is an industry supplying the others, hence by keeping the columns we see how much oine industry affects all of the "buyer" industries
+-   we combine this with the IO values and calculate the difference in effects as previously
+
+[**Comparison of the 2 methods:**]{.underline}
+
+All_effects_affected and All_effects_affecting give the same total results and indirect effects. The difference is whether we calculate affecting or affected.
+
+E.g. AUSC10T12 is affected indirectly of 120, meaning they gain 120 in indirectly from the total worldwide biosolutions production \# AUSC10T12 is affecting indirectly by demanding goods and services across other industries of 1212. So everytime AUSC10T12 produce one biosolution, then other countryXindustries gain 1212 in total \# NB: numbers could change.
+
+```{r indirect/direct effects, include=FALSE}
+
+#----------------------------------------------------------------------
+# Direct / Indirect effects of how each industry is AFFECTED by others
+#----------------------------------------------------------------------
+
+# Combine the two datasets by rows
+Total_Direct_affected <- rbind(All_UNIDO_rows, IO_input)
+
+# Calculate indirect effect (difference between total and direct)
+Indirect_affected <- Total_Direct_affected[1, ] - Total_Direct_affected[2, ]
+
+# Add the difference as a new row to the combined dataset
+All_effects_affected <- rbind(Total_Direct_affected, Indirect_affected)
+
+#----------------------------------------------------------------------
+# Direct / Indirect effects of how each industry is AFFECTING others
+#----------------------------------------------------------------------
+
+# Combine the two datasets by rows
+Total_Direct_affecting <- rbind(All_UNIDO_columns, IO_input)
+
+# Calculate indirect effect (difference between total and direct)
+Indirect_affecting <- Total_Direct_affecting[1, ] - Total_Direct_affecting[2, ]
+
+# Add the difference as a new row to the combined dataset
+All_effects_affecting <- rbind(Total_Direct_affecting, Indirect_affecting)
+
+```
+
+## 4.2.2 Determining effects in terms of number of jobs
+
+In this case we take the result matrix from the multiplication of the leontief matrix and the io vector - before transposing it, and to it we add the relevant information from the employment dataset, which contains the country and industry codes together with the employment output in each.
+
+The logic here is that the previous calculations have found the output values interchanged by industries, and in order to get the jobs the code uses an excel file which contains the industry\*/country pauir codes and an employment multiplier. This employment multiplier column gets first added to the dsmatrix data, then gets mujltiplied with the output values to generate a matrix from which the number of jobs created in each industry can be found. Please note that thisc codde is using the IO Input matrix as themultiplication result between the IO vector and the leontief matri, while the block in 4.2 is using the transposed version - so here the rows and columns are inbversed. this is because ---- check ----- the structure of the employment ratio data is easier to intwegrate iin the oriuginal non yransposed matrix. \*!!!!!!!!!!!!!!!!!!!!!!!
+
+```{r employment, include=FALSE}
+#----------------------------------------------------------
+# Integrating employment data into the IO Model - AFFECTED 
+#---------------------------------------------------------
+
+# Select relevant columns from the employment excel
+IO_emp_output_ratio <- IO_emp_output_ratio %>% select(IO_Code, IO_Cnt_Code, Country, emp_output)
+
+# Merge employment data with the IO model matrix 
+IO_input_result_rownames <- rownames_to_column(IO_input_result, var = "IO_Cnt_Code")
+IO_input_result_jobs_affected <- left_join(IO_input_result_rownames, IO_emp_output_ratio, by = c("IO_Cnt_Code"))
+
+# Multiply the matrix output values with the employment multiplicators to get job numbers 
+
+IO_input_result_jobs_affected_multiplied <- IO_input_result_jobs_affected
+IO_input_result_jobs_affected_multiplied[ , 2:3475] <- lapply(IO_input_result_jobs_affected_multiplied[ , 2:3475], function(col) col * IO_input_result_jobs_affected_multiplied$emp_output)
+
+#-----------------------------------------------------------
+# Integrating employment data into the IO Model - AFFECTING
+#-----------------------------------------------------------
+# The code takes the affected martrix from above, it removes the unecessary columns, it transposes it ot make it easier to calculate the affecting results in the same manner and merge with employment data
+
+Affecting4 <- IO_input_result_jobs_affected_multiplied %>%
+  select(-"IO_Code", -"Country", -"emp_output") %>%
+  column_to_rownames(var = "IO_Cnt_Code") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "IO_Cnt_Code")
+
+# merging / left join with employment data 
+IO_input_result_jobs_affecting_multiplied <- left_join(Affecting4, IO_emp_output_ratio, by = c("IO_Cnt_Code"))
+```
+
+## 4.4. Direct effect for each industry and country
+
+```{r employment, include=FALSE}
+#----------------------------------------------------------
+# Integrating employment data into the IO Model - AFFECTED 
+#---------------------------------------------------------
+
+# Select relevant columns from the employment excel
+IO_emp_output_ratio <- IO_emp_output_ratio %>% select(IO_Code, IO_Cnt_Code, Country, emp_output)
+
+# Merge employment data with the IO model matrix 
+IO_input_result_rownames <- rownames_to_column(IO_input_result, var = "IO_Cnt_Code")
+IO_input_result_jobs_affected <- left_join(IO_input_result_rownames, IO_emp_output_ratio, by = c("IO_Cnt_Code"))
+
+# Multiply the matrix output values with the employment multiplicators to get job numbers 
+
+IO_input_result_jobs_affected_multiplied <- IO_input_result_jobs_affected
+IO_input_result_jobs_affected_multiplied[ , 2:3475] <- lapply(IO_input_result_jobs_affected_multiplied[ , 2:3475], function(col) col * IO_input_result_jobs_affected_multiplied$emp_output)
+
+#-----------------------------------------------------------
+# Integrating employment data into the IO Model - AFFECTING
+#-----------------------------------------------------------
+# The code takes the affected martrix from above, it removes the unecessary columns, it transposes it ot make it easier to calculate the affecting results in the same manner and merge with employment data
+
+Affecting4 <- IO_input_result_jobs_affected_multiplied %>%
+  select(-"IO_Code", -"Country", -"emp_output") %>%
+  column_to_rownames(var = "IO_Cnt_Code") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "IO_Cnt_Code")
+
+# merging / left join with employment data 
+IO_input_result_jobs_affecting_multiplied <- left_join(Affecting4, IO_emp_output_ratio, by = c("IO_Cnt_Code"))
+```
+
+## Various Intermediary Results
+
+This section contains results such as extra calculations from the process, that are not necessarily directly tied to the analysis, but could provide useful in certain cases, including additional client requests.
+
+```{r intermediary results, include=FALSE}
+
+# 1. Total biosolutions across all IO_codes - returns one total value
+# olumn_sum <- sum(Unido_IO_2$total_value, na.rm = TRUE)
+
+# 2. Total value for the final IO codes table 
+# column_sum <- sum(IO_input$total_value, na.rm = TRUE)
+
+# 3. Total Row Sum in IO_vector * Leontief Matrix Multiplication
+# Shows the total amount of an industry's output needed by all other industries
+# Indicates the total supply that the industry provides to meet demands from buyer industries (the cols)
+# IO_input_result_final_result_rows <- colSums(transposed_matrix)
+# print(IO_input_result_final_result_rows)
+# All_UNIDO_rows <- as.data.frame(t(IO_input_result_final_result_rows))
+
+# 4. Sum across rows in the IO_vector * Leontief Transposed Matrix
+# Represents the total inputs required by a buyer industry from all other industries
+# Shows how much each buyer industry demands from the entire supply chain
+# IO_input_result_final_result_columns <- colSums(IO_input_result)
+# print(IO_input_result_final_result_columns)
+# All_UNIDO_columns <- as.data.frame(t(IO_input_result_final_result_columns))
+
+
+# 5. Determining direct jobs 
+
+# finding the direct effect for each industry and country
+#direct_4 <- All_effects_affected %>%
+#  t() %>% #transpose
+#  as.data.frame() %>%
+#  rownames_to_column(var = "IO_Cnt_Code") %>%
+#  left_join(IO_emp_output_ratio, by = "IO_Cnt_Code") %>% #join wityh employment data
+#  mutate(
+#    direct_jobs = emp_output * Direct_value #multiply to get direct job values
+#  )
+
+# Number of direct jobs created in each industry/country pair
+#direct_jobs <- direct_4 %>% select(IO_Code, IO_Cnt_Code, Country, direct_jobs)
+
+###### Where do the indirect jobs affect? 
+# We now have the full transposed matrix called IO_input_result_jobs_affecting_multiplied
+# This matrix shows how direct jobs from a specific industryXcountry affects total jobs in a specific industryXcountry
+# However, this is total jobs. We need indirect jobs NB - see also example send to Johanna.
+# For de direct jobs, we have them in the vector called: direct_jobs.
+# We need to subtract the direct jobs from the total matrix to get the indirect jobs.
+# The indirect jobs should then be collapsed on a country level to see, how biosolutions in DK affect indirect jobs in 1) own and other countries, and 2) industries
+
+# 
+# # for each country
+# # Split the data frame into a list of data frames by country
+# country_datasets <- split(IO_input_result_jobs_affecting_multiplied, IO_input_result_jobs_affecting_multiplied$Country)
+# 
+# # Specify the directory path where you want to save the files
+# directory_path <- "C:/Users/MarcSkovJacobsenADC/ADC/ADC Denmark MNO - Client Folders N/Novonesis/2024/Global socio-economic value of biosolutions/3. Project Execution/IO/Results/Country/"
+# 
+# # Export each dataset to an Excel file
+# for (country in names(country_datasets)) {
+#   file_name <- paste0(country, ".xlsx")
+#   file_path <- paste0(directory_path, file_name)
+#   write_xlsx(country_datasets[[country]], path = file_path)
+# }
+
+# These country specific now shows for each country - how it is affecting other places
+
+```
+
+## Exports
+
+These are various excel outputs obtained throughout the analysis. Remember to change the folder structure for saving them
+
+```{r various exports, include=FALSE}
+
+# Export the matrix containing multipliers:
+write_xlsx(multipliers, "C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Novonesis - The value of biosolutions/Code/IO Model/multipliers.xlsx")
+
+# Exports from the final Multiplication Matrix Transposed
+write_xlsx(All_UNIDO_rows, "All_UNIDO_rows.xlsx")
+write_xlsx(All_UNIDO_columns, "All_UNIDO_columns.xlsx")
+write_xlsx(IO_input_result, "IO_input_result.xlsx")
+
+#Indirect effects - affected and affecting 
+## Export##
+write_xlsx(All_effects_affected, "All_effects_affected.xlsx")
+write_xlsx(All_effects_affecting, "All_effects_affecting.xlsx")
+
+#Export the matricees
+Leontief_matrix <- as.data.frame(Leontief_matrix)
+write_xlsx(Leontief_matrix, "Leontief_matrix.xlsx")
+write_xlsx(Amatrix, "Amatrix.xlsx")
+
+# Export Job Data - Affected then affecting  
+write_xlsx(IO_input_result_jobs_affected_multiplied, "IO_input_result_jobs_affected_multiplied.xlsx")
+write_xlsx(IO_input_result_jobs_affecting_multiplied, "IO_input_result_jobs_affecting_multiplied.xlsx")
+
+# Direct Jobs
+write_xlsx(direct_jobs, "direct_jobs.xlsx")
+
+```
