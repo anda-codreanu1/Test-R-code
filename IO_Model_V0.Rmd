@@ -31,6 +31,15 @@ The code builds a Leontief input–output model from two core inputs: `IO_matri
 
 [to be filled in] [also fill in what needs to be updated to use new data into this model]
 
+Example of code flow:
+FD Vector => growth shares code  
+Biosolutions Shares - > Johanna Code (Unido)- > Output = Biosolution output totals. This also calculates the 2021-2023 using the growth shares
+Employment Ratio Code: Takes as Input> Employment-shares Output = table with employment ratio per industry/country pair.  Then it also takes the IO Model Results as inputs to export employment effects => 2024, 2024H, 2025H
+IO Model Code: uses Employment Ratios and Unido Data + code mapping files = > direct and indirect effects on output and employment → 2024, 2025L, 2025H
+Graph code = > uses the IO Model excel outputs to generate charts
+it makes sense to have one Io Model and then various outputs and inputs instead of 3 files.
+
+
 ## 1. Install and import libraries
 
 Note: if already installed, go to the next cell
@@ -641,3 +650,4 @@ write_xlsx(IO_input_result_jobs_affecting_multiplied, "IO_input_result_jobs_affe
 write_xlsx(direct_jobs, "direct_jobs.xlsx")
 
 ```
+
