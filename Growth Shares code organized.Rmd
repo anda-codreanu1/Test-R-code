@@ -1,0 +1,90 @@
+---
+title: "Growth-shares-Org"
+author: "Anda Codreanu"
+date: "2025-09-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Code summary
+
+## Libraries
+
+**Install**: Only relevant if they are not already installed. Only need to run once.
+
+```{r libraries1 }
+
+install.packages("readxl")
+install.packages("dplyr")
+```
+
+**Run**: Needed
+
+```{r Libraries2 }
+library(readxl)
+library(dplyr)
+library(writexl)
+```
+
+## Imports
+
+First import the demand vector which is an excel file containing the estimated final demand (output) in EUR for various biosolutions by country and industry.
+
+```{r libraries1 }
+
+# Import the FD Vector
+setwd("C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Novonesis - The value of biosolutions/Code/Employment Model")
+
+FD_vector <- read_xlsx("FD_vector.xlsx", sheet = "Input")
+
+```
+
+## Calculations
+
+The code aggregates growth assumptions from the biosolution level to the UNIDO industry level for each country. Each biosolution in the dataset has two predefined growth rates: a normal scenario and a high-growth scenario, the latter applying only to some products if supportive policies or conditions exist. Because multiple biosolutions can belong to the same UNIDO industry, the code calculates a weighted average growth rate for each industry–country pair, using projected 2024 output as weights. This ensures that larger biosolutions have a proportionally greater influence on the industry’s overall growth rate.
+
+For example, consider an industry with two biosolutions: A (output €900,000, normal growth 5%, high growth 8%) and B (output €100,000, normal growth 10%, high growth 20%). The weighted normal growth rate is:
+
+$$
+\begin{aligned}
+\text{Weighted normal growth rate}
+&= \frac{(0.05 \times 900{,}000) + (0.10 \times 100{,}000)}{1{,}000{,}000} \\
+&= \frac{45{,}000 + 10{,}000}{1{,}000{,}000} \\
+&= 0.055 \; (5.5\%)
+\end{aligned}
+$$
+
+If policy support applies only to B, the high-growth rate becomes:
+
+$$
+\begin{aligned}
+\text{Weighted high growth rate (policy applies to B)}
+&= \frac{(0.05 \times 900{,}000) + (0.20 \times 100{,}000)}{1{,}000{,}000} \\
+&= \frac{45{,}000 + 20{,}000}{1{,}000{,}000} \\
+&= 0.065 \; (6.5\%)
+\end{aligned}
+$$
+
+```{r calc}
+
+# Calculate the weighted average of growth rates across industry codes
+weighted_avg <- FD_vector %>%
+  group_by(UNIDO_code, Countries) %>%
+  summarise(
+    WeightedGrowthRate_norm = sum(Normal_GR * `Country product output, 2024, EUR`) / sum(`Country product output, 2024, EUR`),
+    WeightedGrowthRate_high = sum(High_GR * `Country product output, 2024, EUR`) / sum(`Country product output, 2024, EUR`)
+      )
+```
+
+## Exports
+
+You can also embed plots, for example:
+
+```{r exports, echo=FALSE}
+output_file_path <- "Growth_Shares.xlsx"
+write_xlsx(weighted_avg, output_file_path)
+
+```
