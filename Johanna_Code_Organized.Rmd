@@ -1,0 +1,611 @@
+---
+title: "Biosolutions_Data_Analysys_J_Markdown"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Code Summary
+
+The code loads the UNIDO Excel file (contains years, countries, variables, ISIC activity codes, USD values), sets the target measure (Output), picks a list of countries and ISIC codes (which are relevant to biosolutions), and filters to those.
+
+The latest available data for the dataset is from 2021. In case data is available for the specific activity and country from 2021, that is preferred to be used in the model. However, there are cases when data is missing, and for which a series of missing values replacement methods are employed, in a prioritized order, as follows:
+
+-   **Case 1: We have historical data for a country-ISIC code pair, but no data for 2021.**\
+    In this case, we estimate the missing 2021 value by taking the most recent available value for that country-ISIC pair and multiplying it by a growth rate. The growth rate is calculated for each ISIC code by comparing the total global output in 2021 to the total global output in the reference year (the year of the last available data). This means we sum the values for all countries that have data for both years, and then divide the 2021 total by the reference year total. This gives us a single growth rate for that ISIC code, which we then apply to the country’s last known value. This method assumes that the industry grows at the same rate globally, regardless of country-specific conditions.
+
+    **Example:** Denmark has no data for ISIC code 105 in 2021, but the last available value is from 2017 and equals 100 million USD. We calculate the global growth rate for ISIC 105 by dividing the total global output in 2021 by the total global output in 2017. Suppose this rate is 1.2155 (i.e., a 21.55% increase over four years). We then estimate Denmark’s 2021 value as: 100 × 1.2155 = 121.55 million USD
+
+-   **Case 2: We have data for the 2-digit ISIC code and for some, but not all, of its 3-digit subcomponents.**\
+    When data is missing for one or more 3-digit ISIC codes under a known 2-digit total, we estimate the missing values using residuals. First, we subtract the sum of the known 3-digit values from the 2-digit total. The remaining value is then distributed among the missing 3-digit codes. If only one 3-digit code is missing, it receives the full residual. If multiple are missing, the residual is split based on the global distribution of those 3-digit codes relative to the 2-digit total. This method is applied only when the 2-digit value is available and at least one 3-digit value under it is known.
+
+    **Example**: Denmark lacks data for ISIC codes 104 and 105 in 2021. However, the total value for ISIC code 10 (the 2-digit parent) is available and equals 23.4 billion USD. The sum of the known 3-digit codes under ISIC 10 (codes 101–103 and 106–108) is 15.4 billion USD. This leaves a residual of 8 billion USD to be distributed between codes 104 and 105. Based on global averages, code 104 typically accounts for 9% of ISIC 10, and code 105 for 16%. Their combined share is 25%, so we calculate their relative shares: 104 represents 36% of the missing portion (9/25), and 105 represents 64% (16/25). Applying these shares to the 8 billion USD residual, we assign 2.9 billion USD to code 104 and 5.1 billion USD to code 105.
+
+-   **Case 3: We have total output data for a country, but no data for specific industries.**\
+    This method is used when a country has missing values for one or more industries, and we cannot estimate them using historical data or residuals. In this case, we rely on countries that have complete data for all industries in 2021. These countries are used as reference points to calculate the global average share of each industry in the total national output. Once these global shares are calculated, we apply them to the total known output of the country with missing data. This total includes both the values directly available and those already estimated using the previous methods. By multiplying the global average share of an industry with the country’s total output, we estimate the missing value for that industry. This approach ensures that every country-industry pair has a value for 2021, even when no direct or partial data is available for that specific industry. It also avoids relying on country-specific assumptions and instead uses global patterns observed in countries with complete data.
+
+    **Example:** Suppose Country Y has a total industrial output of 200 billion USD in 2021, based on available and previously estimated data. However, it lacks data for ISIC code 105. From countries with full coverage, we know that ISIC 105 typically represents 2.5% of total output. We then estimate Country Y’s value for ISIC 105 as: 200 × 0.025 = 5 billion USD
+
+**NOTE: These cases are explained on p. 66-67 in the report.**
+
+Finally, biosolutions low/high shares are imported from an external file and applied to the 2021 activity values to obtain biosolutions amounts by activity and country, with national and overall totals. Activity-level growth is then used to project these values to 2023, and the outputs (country totals, global totals, by-code breakdowns, and the full table) are exported to a multi-sheet Excel workbook. **The Output file is called BioSolutions_Output.xlsx, and is available in Sharepoint.**
+
+[***To run this code, first change the paths in the setup section to match your folder structure, as well as the output folder (from the last cell of the code). Then you can click ''run all'' and the outpout file should be generated in the right folder. In addition, the current setup generates an output only for the selected countries, but uncomment the code in the first and last cells to generate the global numbers. The code can also be run one chunk after the other, but only in the order they appear in.***]{.underline}
+
+```{r Install Packages}
+install.packages("writexl")
+install.packages("readxl")
+install.packages("openxlsx")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("purrr")  
+```
+
+## Setup
+
+This part generates a dataframe from the excel file. Remember to change the path to your own. Only a specified list of codes/countries are included in the analysis, based on their relevance. Note: if you want to analyze all countries, not just those listed in the Country List, use the commented code to make the initial dataframes. Otherwise run all code as it is.
+
+```{r Install Packages}
+#libraries
+library(dplyr)
+library(readxl)
+library(writexl)
+library(openxlsx)
+library(tidyr)
+library(purrr) 
+```
+
+**(change the files' directories below)**
+
+```{r Files and folder structure}
+#Set working directory + file structures: CHANGE 
+setwd("C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Novonesis - The value of biosolutions/Code")
+
+#biosolution shares excel 
+    df_bio_shares <- read_excel("C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Novonesis - The value of biosolutions/Code/Biosolutions_industry_definitions.xlsx",
+                              sheet = "Country specific shares (all)",
+                              col_types = c("text", "text", "numeric", "numeric")) %>%
+    filter(Country %in% country_list, !is.na(`ActivityCode`)) %>%
+    mutate(ActivityCode = as.character(ActivityCode))
+    
+#2021 - 2023 growth rates excel 
+  df_21_23_growth <- read_excel("C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/Projects/Novonesis - The value of biosolutions/Code/Biosolutions_industry_definitions.xlsx",
+                            sheet = "Global market growth") %>%
+  select(`ActivityCode`, `Market growth annual avg 21-23 (%)`) %>%
+  filter(!is.na(`Market growth annual avg 21-23 (%)`)) %>%
+  mutate(ActivityCode = as.character(ActivityCode))
+```
+
+```{r Dataframes}
+
+df_UNIDO <- read_excel("UNIDO_1-2-3-4.xlsx") %>%
+  select(Year, Country, Variable, ActivityCode, Activity, ValueUSD)
+
+measure <- "Output"
+UNIDO_code_list <-  c("105", "107", "110", "201", "2021", "2029" ) ## ISIC Industry Codes - No Pharma
+
+#Countries of interest
+country_list <- c("Denmark", "United States of America", "Japan",
+                  "Mexico", "Poland", "Germany", "Türkiye", "Australia",
+                  "France", "United Kingdom", "Spain", "Italy", "Colombia", 
+                  "Republic of Korea", "India", "China", "Indonesia", "Brazil") ## OBS: Countries requested by NN (excl EU and Global)
+
+##From the country list, keep only the activities matching the industry codes 
+df_selection <- df_UNIDO %>%
+  filter(Country %in% country_list, Variable == measure, ActivityCode %in% UNIDO_code_list)
+
+#alternatively, use the following if you want to analyze all countries - not just the ones liested above
+  #df_selection <- df_UNIDO %>%
+    #filter(Variable == measure, ActivityCode %in% UNIDO_code_list)
+
+  # Create all possible combinations of Country and ActivityCode
+ #  all_combinations <- expand_grid(
+    #Country = unique(df_UNIDO$Country),
+    #ActivityCode = UNIDO_code_list)
+
+# Create all possible combinations of Country and ActivityCode
+#expand grid generates cartesian products: the country vector X the UNIDO code vector
+all_combinations <- expand_grid(
+  Country = country_list,
+  ActivityCode = UNIDO_code_list)
+
+# Filter dataset for 2021 and merge with the complete structure
+df_output_wide_2021 <- all_combinations %>%
+  left_join(
+    df_selection %>%
+      filter(Year == 2021) %>%
+      select(Country, ActivityCode, ValueUSD), 
+    by = c("Country", "ActivityCode")
+  ) %>%
+  pivot_wider(names_from = Country, values_from = ValueUSD, values_fill = list(ValueUSD = NA))  # Fill missing values with NA
+
+##Ensure All Countries & NACE Codes Are Included for 2021
+
+##Country list
+df_full <- expand_grid(
+  Country = country_list,
+  ActivityCode = UNIDO_code_list,
+  Year = 2021
+) %>%
+  mutate(Year = as.numeric(Year)) %>%  # Convert Year to numeric
+  left_join(df_selection %>% mutate(Year = as.numeric(Year)), by = c("Country", "ActivityCode", "Year")) #left join to keep only the relevant rows from df_selection
+
+```
+
+## Case 1: Replace missing values using historical data
+
+This code begins by looking for countries which have no missing data for all Activity codes and years, then for each activity code for each year (excluding 2021), it calculates total values for each activity code, by summing up individual values. This is used to calculate a growth rate, which will then be added to the last value available in the dataset for each activity code to make up some of the 2021 missing values.
+
+```{r Handling Missing Values in 2021 Data}
+
+  # Filter countries that have data for both the given year and 2021 for each ActivityCode
+  df_valid_countries <- df_selection %>%
+    filter(Year == 2021) %>%
+    select(Country, ActivityCode) %>%
+    inner_join(
+      df_selection %>% filter(Year < 2021), 
+      by = c("Country", "ActivityCode")
+    )
+  
+  # Calculate the total value for each year and ActivityCode (for valid countries only)
+  df_growth <- df_selection %>%
+    filter(Country %in% df_valid_countries$Country) %>%
+    group_by(Year, ActivityCode) %>%
+    summarise(TotalValue = sum(ValueUSD, na.rm = TRUE), .groups = "drop") %>%
+    filter(Year != 2021) %>%  # Exclude 2021 itself from the growth rate calculation
+    left_join(
+      df_selection %>%
+        filter(Year == 2021) %>%
+        group_by(ActivityCode) %>%
+        summarise(TotalValue2021 = sum(ValueUSD, na.rm = TRUE), .groups = "drop"),
+      by = "ActivityCode"
+    ) %>%
+    mutate(GrowthRate = (TotalValue2021 / TotalValue) - 1)  # Calculate growth rate relative to 2021
+  
+  # Find the latest available value before 2021 for each country and NACE code
+  df_latest_values <- df_selection %>%
+    filter(Year < 2021) %>%  # Exclude 2021
+    group_by(Country, ActivityCode) %>%
+    slice_max(Year, n = 1, with_ties = FALSE) %>%
+    select(Country, ActivityCode, Year, ValueUSD) %>%
+    rename(LatestYear = Year, LatestValue = ValueUSD)
+  
+  # Assign the corresponding growth rate from df_growth
+  df_latest_values <- df_latest_values %>%
+    left_join(df_growth, by = c("ActivityCode" = "ActivityCode", "LatestYear" = "Year"))
+  
+  # Estimate missing 2021 values
+  df_full <- df_full %>%
+    left_join(df_latest_values, by = c("Country", "ActivityCode")) %>%
+    mutate(EstimatedValue2021 = ifelse(is.na(ValueUSD), 
+                                       LatestValue * (1 + GrowthRate),
+                                       ValueUSD)) %>%
+    select(Year, Country, Variable, ActivityCode, Activity, ValueUSD, EstimatedValue2021)
+  
+  df_total_value_per_country <- df_full %>%
+    group_by(Country) %>%
+    summarise(TotalValue = sum(EstimatedValue2021, na.rm = TRUE)/ 1e6, .groups = "drop")
+
+```
+
+## Case 2: Replace missing values with the Residuals approach (for all 10 industries)
+
+This model ensures that the 3-subdigit indusry values together match the value of their corresponding 2-digit industr, in the 10 Food Industry. It creates separate 2-digit and 3\*digit dataframes, then accross the 3-digit one it adds up the values together, to get a table with each country as a row, and then the total 3-digit value accross all 10 activities. A merger table is then created with this and the 2-digit dataframe, then the residuals is the difference in the 2 values. ideally the residuals =0.
+
+```{r Checking 2-digit and 3-digit axctivities}
+
+  #seelct only the 10... activities 
+  residual_10 <- c("10", "101", "102", "103", "104", "105", "106", "107", "108")
+
+
+  # Step 1: Filter relevant data: select all 10 activities from 2021
+  df_filtered <- df_UNIDO %>%
+    filter(Year == 2021, Variable == "Output", ActivityCode %in% residual_10) %>%
+    select(Country, ActivityCode, ValueUSD) %>%
+    distinct()
+  
+  # Step 2: Create a table with the total 2-digit values per country
+  df_2digit <- df_filtered %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2)) %>%
+    filter(ActivityCode == two_digit_code) %>%  # Only keep 2-digit codes
+    select(Country, two_digit_code, total_2digit_value = ValueUSD)
+  
+  # Step 3: Get total for existing 3-digit codes per country
+  df_3digit <- df_filtered %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2)) %>%
+    filter(ActivityCode != two_digit_code) %>%  # Keep only 3-digit codes
+    group_by(Country, two_digit_code) %>%
+    summarise(total_3digit_known = sum(ValueUSD, na.rm = TRUE), .groups = "drop")
+  
+  # Step 4: Merge and calculate residuals: if residuals == 0 = > the 2-digit and 3-digit totals match 
+  df_residuals <- df_2digit %>%
+    left_join(df_3digit, by = c("Country", "two_digit_code")) %>%
+    mutate(
+      total_3digit_known = ifelse(is.na(total_3digit_known), 0, total_3digit_known),  # Handle missing values
+      residual_value = total_2digit_value - total_3digit_known  # Calculate the missing portion
+    )
+  
+  # Step 5: Get the global average distribution of 3-digit codes
+  df_global_shares <- df_filtered %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2)) %>%
+    filter(ActivityCode != two_digit_code) %>%  # Only 3-digit codes
+    group_by(two_digit_code, ActivityCode) %>%
+    summarise(
+      total_value = sum(ValueUSD, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    group_by(two_digit_code) %>%
+    mutate(global_share = total_value / sum(total_value, na.rm = TRUE)) %>%
+    select(two_digit_code, ActivityCode, global_share)
+  
+  df_selection <- df_UNIDO %>%
+    filter(Variable == measure, ActivityCode %in% residual_10)
+  
+  # Create all possible combinations of Country and ActivityCode
+  all_combinations <- expand_grid(
+    Country = unique(df_UNIDO$Country),
+    ActivityCode = residual_10)
+  
+  # Filter dataset for 2021 and merge with the complete structure
+  df_output_wide_2021 <- all_combinations %>%
+    left_join(
+      df_selection %>%
+        filter(Year == 2021) %>%
+        select(Country, ActivityCode, ValueUSD), 
+      by = c("Country", "ActivityCode")
+    ) %>%
+    pivot_wider(names_from = Country, values_from = ValueUSD, values_fill = list(ValueUSD = NA))  # Fill missing values with NA
+  
+  ##Ensure All Countries & NACE Codes Are Included for 2021
+  df_full_residual <- expand_grid(
+    Country = unique(df_UNIDO$Country),
+    ActivityCode = residual_10,
+    Year = 2021
+  ) %>%
+    mutate(Year = as.numeric(Year)) %>%  # Convert Year to numeric
+    left_join(df_selection %>% mutate(Year = as.numeric(Year)), by = c("Country", "ActivityCode", "Year"))
+  
+  # Step 6: Extract two-digit code for each activity
+  df_full_residual <- df_full_residual %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2))
+  
+  # Step 7: Merge residuals (already calculated in df_residuals)
+  df_full_residual <- df_full_residual %>%
+    left_join(df_residuals, by = c("Country", "two_digit_code"))
+  
+  # Step 8: Merge global shares
+  df_full_residual <- df_full_residual %>%
+    left_join(df_global_shares, by = c("two_digit_code", "ActivityCode"))
+  
+  # Step 9: Identify missing values
+  df_missing <- df_full_residual %>%
+    filter(is.na(ValueUSD))
+  
+  # Step 10: Normalize global shares only within missing ActivityCodes per country
+  df_missing <- df_missing %>%
+    group_by(Country, two_digit_code) %>%
+    mutate(
+      adjusted_global_share = global_share / sum(global_share, na.rm = TRUE)  # Normalize to sum = 1
+    ) %>%
+    ungroup()
+  
+  # Step 11: Estimate missing values using adjusted shares
+  df_missing <- df_missing %>%
+    mutate(estimated_ValueUSD = residual_value * adjusted_global_share) %>%
+    select(Country, ActivityCode, estimated_ValueUSD)
+  
+  # Step 12: Merge estimated values back into the dataset
+  df_final <- df_full_residual %>%
+    left_join(df_missing, by = c("Country", "ActivityCode")) %>%
+    mutate(ValueUSD = ifelse(is.na(ValueUSD), estimated_ValueUSD, ValueUSD)) %>%
+    select(-estimated_ValueUSD)  # Remove temporary column
+  
+  # Ensure both dataframes have the necessary columns
+  df_full <- df_full %>%
+    left_join(df_final %>% select(Country, ActivityCode, ValueUSD), 
+              by = c("Country", "ActivityCode"))%>%
+    mutate(EstimatedValue2021 = coalesce(EstimatedValue2021, ValueUSD.y)) %>%
+    select(-ValueUSD.y, -ValueUSD.x) 
+  
+```
+
+## Case 2: Replace missing values with the Residuals approach (for all 20 industries)
+
+Same as above, done for the 20 activity codes
+
+```{r Checking 2-digit and 3-digit axctivities}
+
+  #select only the 20... activities 
+  residual_20 <- c("20", "201", "202", "203")
+
+  # Step 1: Filter relevant data
+  df_filtered <- df_UNIDO %>%
+    filter(Year == 2021, Variable == "Output", ActivityCode %in% residual_20) %>%
+    select(Country, ActivityCode, ValueUSD) %>%
+    distinct()
+  
+    # Step 2: Create a table with the total 2-digit values per country
+  df_2digit <- df_filtered %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2)) %>%
+    filter(ActivityCode == two_digit_code) %>%  # Only keep 2-digit codes
+    select(Country, two_digit_code, total_2digit_value = ValueUSD)
+  
+    # Step 3: Get total for existing 3-digit codes per country
+  df_3digit <- df_filtered %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2)) %>%
+    filter(ActivityCode != two_digit_code) %>%  # Keep only 3-digit codes
+    group_by(Country, two_digit_code) %>%
+    summarise(total_3digit_known = sum(ValueUSD, na.rm = TRUE), .groups = "drop")
+  
+   # Step 4: Merge and calculate residuals
+  df_residuals <- df_2digit %>%
+    left_join(df_3digit, by = c("Country", "two_digit_code")) %>%
+    mutate(
+      total_3digit_known = ifelse(is.na(total_3digit_known), 0, total_3digit_known),  # Handle missing values
+      residual_value = total_2digit_value - total_3digit_known  # Calculate the missing portion
+    )
+
+   # Step 5: Get the global average distribution of 3-digit codes within each 2-digit code
+  df_global_shares <- df_filtered %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2)) %>%
+    filter(ActivityCode != two_digit_code) %>%  # Only 3-digit codes
+    group_by(two_digit_code, ActivityCode) %>%
+    summarise(
+      total_value = sum(ValueUSD, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    group_by(two_digit_code) %>%
+    mutate(global_share = total_value / sum(total_value, na.rm = TRUE)) %>%
+    select(two_digit_code, ActivityCode, global_share)
+  
+  df_selection <- df_UNIDO %>%
+    filter(Variable == measure, ActivityCode %in% residual_20)
+  
+  
+  # Create all possible combinations of Country and ActivityCode
+  all_combinations <- expand_grid(
+    Country = unique(df_UNIDO$Country),
+    ActivityCode = residual_20)
+  
+  # Filter dataset for 2021 and merge with the complete structure
+  df_output_wide_2021 <- all_combinations %>%
+    left_join(
+      df_selection %>%
+        filter(Year == 2021) %>%
+        select(Country, ActivityCode, ValueUSD), 
+      by = c("Country", "ActivityCode")
+    ) %>%
+    pivot_wider(names_from = Country, values_from = ValueUSD, values_fill = list(ValueUSD = NA))  # Fill missing values with NA
+  
+  ##Ensure All Countries & NACE Codes Are Included for 2021
+  df_full_residual <- expand_grid(
+    Country = unique(df_UNIDO$Country),
+    ActivityCode = residual_20,
+    Year = 2021
+  ) %>%
+    mutate(Year = as.numeric(Year)) %>%  # Convert Year to numeric
+    left_join(df_selection %>% mutate(Year = as.numeric(Year)), by = c("Country", "ActivityCode", "Year"))
+  
+  # Step 5: Extract two-digit code for each activity
+  df_full_residual <- df_full_residual %>%
+    mutate(two_digit_code = substr(ActivityCode, 1, 2))
+  
+  # Step 6: Merge residuals (already calculated in df_residuals)
+  df_full_residual <- df_full_residual %>%
+    left_join(df_residuals, by = c("Country", "two_digit_code"))
+  
+  # Step 7: Merge global shares
+  df_full_residual <- df_full_residual %>%
+    left_join(df_global_shares, by = c("two_digit_code", "ActivityCode"))
+  
+  # Step 8: Identify missing values
+  df_missing <- df_full_residual %>%
+    filter(is.na(ValueUSD))
+  
+  # Step 9: Normalize global shares only within missing ActivityCodes per country
+  df_missing <- df_missing %>%
+    group_by(Country, two_digit_code) %>%
+    mutate(
+      adjusted_global_share = global_share / sum(global_share, na.rm = TRUE)  # Normalize to sum = 1
+    ) %>%
+    ungroup()
+  
+  # Step 10: Estimate missing values using adjusted shares
+  df_missing <- df_missing %>%
+    mutate(estimated_ValueUSD = residual_value * adjusted_global_share) %>%
+    select(Country, ActivityCode, estimated_ValueUSD)
+  
+  # Step 11: Merge estimated values back into the dataset
+  df_final <- df_full_residual %>%
+    left_join(df_missing, by = c("Country", "ActivityCode")) %>%
+    mutate(ValueUSD = ifelse(is.na(ValueUSD), estimated_ValueUSD, ValueUSD)) %>%
+    select(-estimated_ValueUSD)  # Remove temporary column
+  
+  # Ensure both dataframes have the necessary columns
+  df_full <- df_full %>%
+    left_join(df_final %>% select(Country, ActivityCode, ValueUSD), 
+              by = c("Country", "ActivityCode"))%>%
+    mutate(EstimatedValue2021 = coalesce(EstimatedValue2021, ValueUSD))
+```
+
+## Case 3: Replace missing values using Baseline country data
+
+This code first finds all countries that have data for all industries, and all industries having data for all countries. in the countries with data for all industries, we find out the share of each activity relative to the total country value. Then for each industry we calculate an average of these shares, to find out a 'global' share for each industry. Finally, it uses data for industries which have data for all the countries to fill in the missing values of missing industries.
+
+EstimatedValue = TotalBaselineValue × AvgShare Country, Country Industry X industry X
+
+```{r filling missing values}
+
+  # In each activity, for how many countries is there data => keep only activities with data for all countries
+  nace_with_full_coverage <- df_full %>%
+    filter(!is.na(EstimatedValue2021)) %>%
+    group_by(ActivityCode) %>%
+    summarise(Count = n_distinct(Country), .groups = "drop") %>%
+    filter(Count == length(country_list)) %>%
+    pull(ActivityCode)
+  
+  # Computes the value for each activity accross all countries. 
+  total_baseline_value <- df_full %>%
+    filter(ActivityCode %in% nace_with_full_coverage) %>%
+    group_by(Country) %>%
+    summarise(BaselineTotal = sum(EstimatedValue2021, na.rm = TRUE), .groups = "drop")
+  
+  # Identify countries that have full data for all remaining NACE codes:  for each country, is there data accross all the relevant UNIDO codes?
+  countries_with_full_data <- df_full %>%
+    filter(!is.na(EstimatedValue2021), ActivityCode %in% UNIDO_code_list) %>%
+    group_by(Country) %>%
+    summarise(Count = n_distinct(ActivityCode), .groups = "drop") %>%
+    filter(Count == length(UNIDO_code_list)) %>%
+    pull(Country)
+  
+  # Compute industry shares for each country country -  the share of each activity value / the country's total
+  industry_shares_per_country <- df_full %>% 
+    filter(Country %in% countries_with_full_data) %>%
+    group_by(Country) %>%
+    mutate(Share = EstimatedValue2021 / sum(EstimatedValue2021, na.rm = TRUE)) %>%
+    select(Country, ActivityCode, Share)
+  
+  # Compute the average industry share across all countries
+  industry_shares <- industry_shares_per_country %>%
+    group_by(ActivityCode) %>%
+    summarise(AvgShare = mean(Share, na.rm = TRUE), .groups = "drop")
+  
+  ##ESTIMATING MISSING VALUES
+  # Use nace_with_full_coverage for baseline codes
+  df_baseline <- df_full %>%
+    filter(ActivityCode %in% nace_with_full_coverage) %>%
+    group_by(Country) %>%
+    summarise(TotalBaselineValue = sum(EstimatedValue2021, na.rm = TRUE), .groups = "drop")
+  
+  # Merge total baseline values with industry shares
+  df_full <- df_full %>%
+    left_join(df_baseline, by = "Country") %>%
+    left_join(industry_shares, by = "ActivityCode") %>%
+    mutate(EstimatedValue2021 = ifelse(is.na(EstimatedValue2021),  # Only replace missing values
+                                       TotalBaselineValue * AvgShare,
+                                       EstimatedValue2021)) %>%
+    select(Year, Country, Variable, ActivityCode, Activity, ValueUSD, EstimatedValue2021)
+  
+```
+
+## Calculate the value of biosolutions
+
+This part of code uses the Biosolutions_industry_definitions.xlsx file which contains data on biosolutions shares.
+
+```{r Biosolutions shares}
+
+## Use shares to compute Biosolutions value - making a column: Estimated value * the biosolution share from the excel - > in this way it calculates the total monetary value of each biosolution activity.
+#Note: the Low and High are interval values, and only the high is used in the final value calculations
+  
+  df_full_bio <- df_full %>%
+    left_join(df_bio_shares, by = c("ActivityCode", "Country")) %>%
+    mutate(BioSolutionsValueLow = EstimatedValue2021 * BioShareLow,
+           BioSolutionsValueHigh = EstimatedValue2021 * BioShareHigh)
+
+
+  # Compute total bio solution value per country
+  df_bio_country <- df_full_bio %>%
+    group_by(Country) %>%
+    summarise(
+      TotalBioSolutionsValueLow = sum(BioSolutionsValueLow, na.rm = TRUE),
+      TotalBioSolutionsValueLowMillions = TotalBioSolutionsValueLow / 1e6,
+      TotalBioSolutionsValueHigh = sum(BioSolutionsValueHigh, na.rm = TRUE),
+      TotalBioSolutionsValueHighMillions = TotalBioSolutionsValueHigh / 1e6,
+    )
+
+  ## For all countries. Note: 1e9 is just a way of writing 1 000 000 000 -> hence to convert from billions to a number of the format X.Y B USD
+  
+  total_bio_value_all_countries <- df_full_bio %>%
+    summarise(
+      TotalBioSolutionValueLowAllCountries = sum(BioSolutionsValueLow, na.rm = TRUE),
+      TotalBioSolutionsValuLoweAllCountriesBillions = TotalBioSolutionValueLowAllCountries / 1e9,
+      TotalBioSolutionValueHighAllCountries = sum(BioSolutionsValueHigh, na.rm = TRUE),
+      TotalBioSolutionsValueHighAllCountriesBillions = TotalBioSolutionValueHighAllCountries / 1e9
+    )
+```
+
+## Transform 2021 to 2023 values
+
+This code uses the 2021 estimated values and market growth rates to calculate the values from 2023.Then using the general 2023 values it also gets the 2023 values for biosolutions Note: change path
+
+```{r 2021 to 2023}
+  
+##renaming variables for ease and reformat to percentage
+  df_21_23_growth <- df_21_23_growth %>%
+  rename(AvrAnnualGrowth_21_23 = `Market growth annual avg 21-23 (%)`) %>%
+  mutate(AvrAnnualGrowth_21_23 = AvrAnnualGrowth_21_23 / 100) # Convert percentage to decimal
+  
+# Join growth data to the full dataframe
+df_full_bio_2023 <- df_full_bio %>%
+  left_join(df_21_23_growth, by = "ActivityCode") %>%
+  mutate(
+    # Calculate the 2023 value based on the growth rate
+    EstimatedValue2023 = EstimatedValue2021 * (1 + AvrAnnualGrowth_21_23) ^ 2,  # Growth applied for 2 years (from 2021 to 2023)
+    
+    # Calculate the biosolutions values for 2023 using the shares
+    BioSolutionsValueLow2023 = EstimatedValue2023 * BioShareLow,
+    BioSolutionsValueHigh2023 = EstimatedValue2023 * BioShareHigh
+  )
+
+# Compute total bio solution value per country for 2023
+df_bio_country_2023 <- df_full_bio_2023 %>%
+  group_by(Country) %>%
+  summarise(
+    TotalBioSolutionsValueLow2023 = sum(BioSolutionsValueLow2023, na.rm = TRUE),
+    TotalBioSolutionsValueLowMillions2023 = TotalBioSolutionsValueLow2023 / 1e6,
+    TotalBioSolutionsValueHigh2023 = sum(BioSolutionsValueHigh2023, na.rm = TRUE),
+    TotalBioSolutionsValueHighMillions2023 = TotalBioSolutionsValueHigh2023 / 1e6
+  )
+
+# Compute the total bio solution value for all countries for 2023
+total_bio_value_all_countries_2023 <- df_full_bio_2023 %>%
+  summarise(
+    TotalBioSolutionValueLowAllCountries2023 = sum(BioSolutionsValueLow2023, na.rm = TRUE),
+    TotalBioSolutionsValueLowAllCountriesBillions2023 = TotalBioSolutionValueLowAllCountries2023 / 1e9,
+    TotalBioSolutionValueHighAllCountries2023 = sum(BioSolutionsValueHigh2023, na.rm = TRUE),
+    TotalBioSolutionsValueHighAllCountriesBillions2023 = TotalBioSolutionValueHighAllCountries2023 / 1e9
+  )
+  
+df_bio_code_2023 <- df_full_bio_2023 %>%
+  group_by(ActivityCode) %>%
+  summarise(
+    TotalBioSolutionsValueLow2023 = sum(BioSolutionsValueLow2023, na.rm = TRUE),
+    TotalBioSolutionsValueLowMillions2023 = TotalBioSolutionsValueLow2023 / 1e6,
+    TotalBioSolutionsValueHigh2023 = sum(BioSolutionsValueHigh2023, na.rm = TRUE),
+    TotalBioSolutionsValueHighMillions2023 = TotalBioSolutionsValueHigh2023 / 1e6
+  )
+
+```
+
+## Excel export. Change the output folder
+
+```{r excel export}
+
+BioSolutions_Output <- openxlsx::createWorkbook()
+addWorksheet(BioSolutions_Output, "Countries")
+writeData(BioSolutions_Output, "Countries", df_bio_country_2023)
+addWorksheet(BioSolutions_Output, "Total")
+writeData(BioSolutions_Output, "Total", total_bio_value_all_countries_2023)
+addWorksheet(BioSolutions_Output, "Code")
+writeData(BioSolutions_Output, "Code", df_bio_code_2023)
+addWorksheet(BioSolutions_Output, "Full")
+writeData(BioSolutions_Output, "Full", df_full_bio_2023)
+
+openxlsx::saveWorkbook(
+  BioSolutions_Output,
+  "C:/Users/AndaCodreanu/OneDrive - ADC/Desktop/BioSolutions_Output.xlsx",
+  #saveWorkbook(BioSolutions_Output, "BioSolutions_Output_Global.xlsx", overwrite = TRUE), ---- UNCOMMENT WHEN EXPORTING THE GLOBAL VALUES NOT JUST FOR THE RELEVANT COUNTRIES
+  overwrite = TRUE
+)
+
+shell.exec("C:/Users/AndaCodreanu/OneDrive - ADC/Desktop")
+
+```
+
+## 
