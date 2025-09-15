@@ -31,7 +31,7 @@ For employment shares, data is not always available for every industry–country
 
 1.  **Use UNIDO data for job count or output**: the ideal case. Used when the activity exists on the UNIDO database, and when both the employee count and industry//country pair output is available
 2.  **Using UNIDO data of jobs/output industry average**: the number will be inputed by calculating world average for the specific industry, if the industry is within the UNIDO database
-3.  **Using the USA average from the WIOD:** (World Input-Output Database) from 2014 to calculate the jobs per output for the specific industry in the specific country
+3.  **Using the Swedish Data to calculate the jobs per output for the specific industries that are not available in the UNIDO data 
 
 ### Steps for running this code:
 
@@ -345,3 +345,4 @@ write_xlsx(All_effects_affecting_Jobs, "C:/Users/MarcSkovJacobsenADC/ADC/ADC Den
 #Affecting reults by country 
 write_xlsx(All_effects_affecting_cnt, "C:/Users/MarcSkovJacobsenADC/ADC/ADC Denmark MNO - Client Folders N/Novonesis/2024/Global socio-economic value of biosolutions/3. Project Execution/IO/Results/All_effects_affecting_cnt_norm25.xlsx")
 ```
+
