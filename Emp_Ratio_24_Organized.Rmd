@@ -31,7 +31,7 @@ For employment shares, there are cases when data is not available for every indu
 
 1.  **Use UNIDO data for job count or output**: the ideal case. Used when the activity exists on the UNIDO database, and when both the employee count and industry//country pair output is available
 2.  **Using UNIDO data of jobs/output industry average**: the number will be inputed by calculating world average for the specific industry, if the industry is within the UNIDO database
-3.  **Using the USA average from the WIOD:** (World Input-Output Database) from 2014 to calculate the jobs per output for the specific industry in the specific country
+3.  **Using Swedish Data Averages to calculate jobs per output for the specific industries that are not in the UNIDO data 
 
 ### Steps for running this code:
 
@@ -339,3 +339,4 @@ write_xlsx(All_effects_affecting_Jobs, "All_effects_affecting_Jobs.xlsx")
 write_xlsx(All_effects_affecting_cnt, "All_effects_affecting_cnt.xlsx")
 
 ```
+
