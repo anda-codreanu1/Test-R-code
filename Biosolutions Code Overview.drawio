@@ -1,20 +1,179 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0" version="28.2.1">
   <diagram name="Page-1" id="xI2TjOL3Dtbvk028gNrC">
-    <mxGraphModel dx="1546" dy="892" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+    <mxGraphModel dx="1556" dy="567" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-1" value="Biosolutions Code&amp;nbsp;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="120" y="280" width="200" height="80" as="geometry" />
+        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-1" value="Biosolutions Code&amp;nbsp;" style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="120" y="280" width="120" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-2" value="Grand View Research - Data on growth rates and revenue&amp;nbsp;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
-          <mxGeometry x="170" y="90" width="120" height="60" as="geometry" />
+        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-2" value="Grand View Research - Data on growth rates and revenue&amp;nbsp;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" parent="1" vertex="1">
+          <mxGeometry x="-40" y="480" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-3" value="OECD IO Model data (2020)" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
-          <mxGeometry x="420" y="90" width="120" height="60" as="geometry" />
+        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-3" value="OECD IO Model data (2020)" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" parent="1" vertex="1">
+          <mxGeometry x="290" y="200" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-4" value="Biosolutions_Industry&lt;div&gt;__Definitions.xlsx - File with manually computed definitions from various sources - has the share of biosolutions relative to each industryxcountry pair&amp;nbsp;&lt;/div&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
-          <mxGeometry x="610" y="90" width="230" height="110" as="geometry" />
+        <mxCell id="HoI9m2LMYl4AdCsWqnJ0-4" value="Biosolutions Industry Definitions and values (1,2 digit)" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" parent="1" vertex="1">
+          <mxGeometry x="-40" y="310" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-1" value="Biosolutions Values per Country/Industry//Totals" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="282.5" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-3" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="240" y="320" as="sourcePoint" />
+            <mxPoint x="280" y="320" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-4" value="UNIDO Output values&amp;nbsp;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="-40" y="230" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-5" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="HoI9m2LMYl4AdCsWqnJ0-1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="260" as="sourcePoint" />
+            <mxPoint x="130" y="210" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-7" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="HoI9m2LMYl4AdCsWqnJ0-1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="350" as="sourcePoint" />
+            <mxPoint x="130" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-16" value="FD Vector (manual)&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&amp;nbsp;&lt;/span&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="480" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-17" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-16">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="510" as="sourcePoint" />
+            <mxPoint x="130" y="460" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-18" value="Growth Shares Code" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="480" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-19" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-18">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="240" y="510" as="sourcePoint" />
+            <mxPoint x="290" y="460" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-21" value="Input Output Model Code" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fa6800;fontColor=#000000;strokeColor=#C73500;" vertex="1" parent="1">
+          <mxGeometry x="490" y="290" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-22" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-21">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="420" y="320" as="sourcePoint" />
+            <mxPoint x="470" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-23" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="410" y="230" as="sourcePoint" />
+            <mxPoint x="490" y="320" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-24" value="UNIDO - OECD Activity Code mapping file" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="110" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-25" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-21">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="410" y="140" as="sourcePoint" />
+            <mxPoint x="460" y="90" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-26" value="Employment Ratio Code" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="650" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-28" value="Employment Ratios for each Industry x Country Pair" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="652.5" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-29" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-21">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="440" y="690" as="sourcePoint" />
+            <mxPoint x="490" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-30" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-28">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="240" y="690" as="sourcePoint" />
+            <mxPoint x="290" y="640" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-31" value="Results/All_UNIDO_rows or columns or&amp;nbsp;All_effects_affected" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="155" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-34" value="Forecast/All_UNIDO_rows&lt;div&gt;_Norm25 or columns or&amp;nbsp;All_effects_affected&lt;/div&gt;&lt;div&gt;_Norm25&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="272.5" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-37" value="Forecast/All_UNIDO_rows&lt;div&gt;_High25 or columns or&amp;nbsp;All_effects_affected&lt;/div&gt;&lt;div&gt;_High&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;25&lt;/span&gt;&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="395" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-38" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.059;entryY=0.765;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-31">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610" y="322.5" as="sourcePoint" />
+            <mxPoint x="660" y="272.5" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-39" value="" style="endArrow=classic;html=1;rounded=0;entryX=-0.003;entryY=0.581;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-34">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610" y="320" as="sourcePoint" />
+            <mxPoint x="660" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-40" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="pOCYMi9OLGm4HtoFdm7G-37">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610" y="320" as="sourcePoint" />
+            <mxPoint x="660" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-41" value="Legend&amp;nbsp;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="730" y="670" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-42" value="" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+          <mxGeometry x="735" y="710" width="50" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-43" value="Input Files" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="800" y="705" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-44" value="" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="735" y="750" width="50" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-45" value="Outputs" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="800" y="745" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-46" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="735" y="790" width="50" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-47" value="Code&amp;nbsp;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="800" y="785" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-48" value="Emploument Model 2024&amp;nbsp;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="157.5" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-50" value="Emploument Model 2025 Normal" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="275" width="120" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-52" value="Emploument Model 2025 Normal" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="390" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-54" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="860" y="205" as="sourcePoint" />
+            <mxPoint x="980" y="204" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-57" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="860" y="320.5" as="sourcePoint" />
+            <mxPoint x="980" y="319.5" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pOCYMi9OLGm4HtoFdm7G-58" value="" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="860" y="438" as="sourcePoint" />
+            <mxPoint x="980" y="437" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>
